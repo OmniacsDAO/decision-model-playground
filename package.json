@@ -1,0 +1,15 @@
+{
+  "name": "decision-model-playground",
+  "version": "0.1.0",
+  "description": "A browser workspace for exploring typed decision models with your own endpoints and keys.",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/browser.mjs",
+    "check:repo": "node scripts/check-repo.mjs"
+  }
+}

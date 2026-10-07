@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101319">
+  <meta name="description" content="Explore decision models with typed questions, probability charts, and your own API connections.">
+  <title>Decision Model Playground</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body class="sidebar-open">
+  <header class="topbar">
+    <div class="brand-group">
+      <button class="icon-button" id="sidebar-toggle" aria-controls="scenario-sidebar" aria-expanded="true" aria-label="Toggle scenarios" title="Toggle scenarios">☰</button>
+      <a class="brand" href="/" aria-label="Decision Model Playground home"><img src="/favicon.svg" alt="" width="25" height="25"><strong>Decision Model<span> Playground</span></strong></a>
+    </div>
+  </header>
+  <div class="app-layout">
+    <aside class="sidebar" id="scenario-sidebar" aria-label="Scenario library">
+      <div class="sidebar-title"><h1>Scenarios</h1><button class="icon-button" id="new-scenario" aria-label="New scenario" title="New scenario">＋</button></div>
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="scenario-search" type="search" placeholder="Filter scenarios…" aria-label="Filter scenarios" autocomplete="off"><kbd>/</kbd></label>
+      <div class="sidebar-heading"><h2>EXAMPLES</h2><span id="example-count"></span></div>
+      <nav id="examples" aria-label="Example scenarios"></nav>
+      <div class="sidebar-heading"><h2>SAVED</h2><button class="icon-button" id="import-button" title="Import scenario JSON" aria-label="Import a scenario">↥</button></div>
+      <nav id="saved-scenarios" aria-label="Saved scenarios"></nav>
+    </aside>
+    <main id="workspace">
+      <section class="workspace-heading" aria-label="Current scenario">
+        <div class="scenario-title"><div class="breadcrumb"><span aria-hidden="true">~/</span> <span id="scenario-category">START HERE</span></div><h2 id="scenario-heading">The apple test</h2><p id="scenario-description">One record. Three decision types.</p></div>
+        <div class="scenario-actions"><button class="button quiet" id="export-button">Export ↓</button><button class="button secondary" id="save-button">Save</button></div>
+      </section>
+      <section class="connection-bar" aria-label="Model selection">
+        <div class="connection-select"><label for="endpoint">ENDPOINT</label><select id="endpoint" aria-label="Decision model endpoint"><option>Loading…</option></select></div>
+        <code id="model-name" class="endpoint-model">—</code>
+        <button class="button secondary tiny" id="key-button" hidden>Add API key</button>
+        <button class="button quiet check-button" id="check-button" title="Check endpoint connection" hidden><span class="status-dot neutral" id="connection-dot"></span><span id="connection-status">Check</span></button>
+      </section>
+      <div id="global-error" class="notice error" role="alert" hidden><span id="error-message"></span><button class="icon-button" id="dismiss-error" aria-label="Dismiss error">×</button></div>
+      <div class="workbench">
+        <section class="editor-panel panel" aria-labelledby="request-heading">
+          <div class="panel-header">
+            <h3 id="request-heading"><span class="panel-number">01</span> request</h3>
+            <div class="panel-tools"><button class="button tiny quiet" id="format-button" title="Format JSON in the editor">Format { }</button><div class="segmented" role="group" aria-label="Request view"><button class="active" id="builder-tab" aria-pressed="true">Builder</button><button id="json-tab" aria-pressed="false">JSON</button></div></div>
+          </div>
+          <div id="builder-view" class="panel-body">
+            <div class="section-heading"><label for="state-input">STATE <span class="subtle">/ context</span></label><span id="state-kind" class="count-badge" aria-live="polite" title="Detected state type">Text</span></div>
+            <textarea id="state-input" class="code state-input" spellcheck="false" aria-describedby="state-hint"></textarea>
+            <div class="field-note" id="state-hint">Text or JSON. Detected automatically.</div>
+            <div class="section-heading questions-heading"><h4>QUESTIONS <span class="count-badge" id="question-count">0</span></h4><button class="button tiny quiet" id="add-question">＋ Add</button></div>
+            <div id="questions"></div>
+          </div>
+          <div id="json-view" class="panel-body" hidden><label class="field-label" for="request-json">REQUEST / state + questions</label><textarea id="request-json" class="code raw-editor" spellcheck="false"></textarea><p class="field-note">Model comes from the selected endpoint.</p></div>
+          <div class="run-bar"><span id="request-status">Loading…</span><button class="button primary" id="run-button" disabled><span aria-hidden="true">▶</span> Run <kbd>⌘ ↵</kbd></button></div>
+        </section>
+        <section class="results-panel panel" aria-labelledby="results-heading">
+          <div class="panel-header"><h3 id="results-heading"><span class="panel-number">02</span> response</h3><div class="segmented" role="group" aria-label="Result view"><button class="active" id="results-tab" aria-pressed="true">Decisions</button><button id="response-tab" aria-pressed="false">JSON</button></div></div>
+          <div id="result-summary" hidden></div>
+          <div id="results" class="panel-body" aria-live="polite">
+            <div class="empty-state">
+              <div class="console-line"><span class="console-prompt">❯</span> Ready to run</div>
+              <p>Choose an endpoint, then run or edit this example.</p>
+              <div class="empty-types"><span><b class="type-pill noul">noul</b> yes / no</span><span><b class="type-pill choice">choice</b> pick one</span><span><b class="type-pill score">score</b> rate it</span></div>
+            </div>
+          </div>
+          <div id="response-view" class="panel-body" hidden><button id="copy-response" class="button tiny secondary" disabled>Copy JSON</button><pre id="response-json" class="code">Awaiting response.</pre></div>
+          <div class="results-footer" hidden></div>
+        </section>
+      </div>
+      <details class="history-section" id="history-drawer">
+        <summary><span>↳ RUN HISTORY <span class="count-badge" id="history-count">0</span></span><span id="history-latest">No runs yet</span><span class="drawer-chevron" aria-hidden="true">⌃</span></summary>
+        <div class="history-toolbar"><span>Open a run to restore its request.</span><button class="button quiet tiny" id="clear-history">Clear</button></div>
+        <div id="history"><p class="history-empty">No runs yet.</p></div>
+      </details>
+      <footer class="page-footer"><span id="draft-status">WORKSPACE READY</span><span><kbd>⌘ / Ctrl + S</kbd> save <span class="footer-divider">/</span> <kbd>⌘ / Ctrl + ↵</kbd> run</span></footer>
+    </main>
+  </div>
+  <dialog id="connections-dialog" aria-labelledby="connection-heading" aria-describedby="connection-note">
+    <form method="dialog" class="dialog-heading"><h2 id="connection-heading">Add endpoint</h2><button class="icon-button" aria-label="Close endpoint settings">×</button></form>
+    <div id="connections-list" hidden></div>
+    <form id="connection-form" hidden>
+      <label class="field-label" for="connection-name">Name</label><input id="connection-name" required maxlength="80" placeholder="My decision model">
+      <label class="field-label" for="connection-url">Endpoint URL</label><input id="connection-url" type="url" required maxlength="2048" placeholder="http://localhost:9917" autocomplete="off" spellcheck="false">
+      <p class="field-note">Base URL, /v1, or /v1/systemone. The server must support this decision API.</p>
+      <div class="connection-fields"><label><span class="field-label">Model ID</span><input id="connection-model" required maxlength="200" placeholder="imajev-4b" autocomplete="off" spellcheck="false"></label>
+      <label><span class="field-label">API profile</span><select id="connection-kind"><option value="custom">Compatible API</option><option value="imajev">Imajev (8 questions)</option></select></label></div>
+      <div class="dialog-actions"><button class="button quiet" type="button" id="cancel-connection">Cancel</button><button class="button primary" type="submit">Add endpoint</button></div><p id="connection-error" class="error-text" role="alert"></p>
+    </form>
+    <p class="field-note" id="connection-note">Saved in this browser.</p>
+  </dialog>
+  <dialog id="save-dialog">
+    <form id="save-form">
+      <div class="dialog-heading"><h2>Save scenario</h2><button type="button" class="icon-button" id="close-save" aria-label="Close save dialog">×</button></div>
+      <label class="field-label" for="scenario-title">Name</label><input id="scenario-title" maxlength="120" required>
+      <label class="field-label" for="scenario-notes">Description</label><textarea id="scenario-notes" maxlength="500" rows="2"></textarea>
+      <div class="dialog-actions"><button type="button" class="button quiet" id="save-copy">Save a copy</button><button type="submit" class="button primary">Save</button></div><p id="save-error" class="error-text" role="alert"></p>
+    </form>
+  </dialog>
+  <input type="file" id="import-file" accept=".json,application/json" hidden>
+  <div id="toast" role="status" hidden></div>
+  <noscript>Enable JavaScript to use the console.</noscript>
+</body>
+</html>

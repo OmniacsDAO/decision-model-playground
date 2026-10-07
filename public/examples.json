@@ -1,0 +1,49 @@
+[
+  {
+    "id": "fruit-check", "version": 1, "title": "The apple test", "category": "Start here",
+    "description": "One small record. Three different ways to make a decision.",
+    "state": { "fruit": "apple", "color": "red", "count": 3 },
+    "questions": {
+      "is_apple": { "type": "noul", "instructions": "Does the record say the fruit is an apple?" },
+      "color": { "type": "choice", "instructions": "What color is the fruit?", "criteria": { "red": "Red fruit", "blue": "Blue fruit", "green": "Green fruit" } },
+      "count": { "type": "score", "instructions": "How many apples are in the record?", "criteria": ["Zero apples", "One apple", "Two apples", "Three apples", "Four apples"] }
+    }
+  },
+  {
+    "id": "support-desk", "version": 1, "title": "At the support desk", "category": "Classification",
+    "description": "Route a support message and decide how much attention it needs.",
+    "state": "I paid for the annual plan yesterday, but my account still says free. I need to present to a client in two hours. Can someone help?",
+    "questions": {
+      "team": { "type": "choice", "instructions": "Which team is best placed to resolve this request?", "criteria": { "billing": "Payments and subscription entitlements", "technical": "Product defects unrelated to billing", "sales": "Questions before buying" } },
+      "time_sensitive": { "type": "noul", "instructions": "Does the customer mention a specific upcoming deadline?" },
+      "urgency": { "type": "score", "instructions": "How urgent is the request based only on the message?", "criteria": ["No time pressure", "Would appreciate a reply soon", "Needs help today", "Immediate deadline or critical impact"] }
+    }
+  },
+  {
+    "id": "missing-evidence", "version": 1, "title": "What we don't know", "category": "Uncertainty",
+    "description": "Leave evidence out and compare how models express uncertainty.",
+    "state": { "package": "A sealed, unlabelled cardboard box arrived at the front desk.", "contents": "Not inspected" },
+    "questions": {
+      "contains_glass": { "type": "noul", "instructions": "Does the box contain glass? Base the answer only on the available evidence." },
+      "contents": { "type": "choice", "instructions": "What does the package contain?", "criteria": { "books": "Printed books", "clothes": "Clothing", "electronics": "Electronic equipment" } }
+    }
+  },
+  {
+    "id": "task-routing", "version": 1, "title": "Choose a working mode", "category": "Routing",
+    "description": "Classify a task before deciding how to handle it.",
+    "state": { "task": "Compare two proposed database schemas and explain the tradeoffs for a system handling frequent account transfers.", "needs_explanation": true },
+    "questions": {
+      "mode": { "type": "choice", "instructions": "Which mode best matches the requested work?", "criteria": { "lookup": "Retrieve a single known fact", "transform": "Rewrite or reformat supplied content", "reason": "Analyze relationships, constraints, or tradeoffs" } },
+      "needs_generation": { "type": "noul", "instructions": "Does fulfilling the task require generating an explanation rather than choosing a fixed label?" }
+    }
+  },
+  {
+    "id": "draft-review", "version": 1, "title": "Check a draft", "category": "Verification",
+    "description": "Check a proposed reply against the facts it was given.",
+    "state": { "facts": { "refund_status": "Under review", "expected_review_days": 3 }, "draft": "Your refund has been approved and the money will arrive tomorrow." },
+    "questions": {
+      "supported": { "type": "noul", "instructions": "Are all factual claims in the draft supported by the facts?" },
+      "action": { "type": "choice", "instructions": "What should happen to this draft?", "criteria": { "send": "Accurately reflects the facts", "revise": "Makes claims that are unsupported or contradictory", "clarify": "The facts are too ambiguous to assess the draft" } }
+    }
+  }
+]
