@@ -1,11 +1,11 @@
 // Real-browser regression checks; no npm browser dependency or live model calls.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { access, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, readdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startFixture, stop } from './helpers.mjs';
+import { startFixture } from './helpers.mjs';
+import { launchBrowser } from './browser-driver.mjs';
 
 const cache = join(homedir(), 'Library/Caches/ms-playwright');
 const cached = (await readdir(cache).catch(() => [])).filter(name => name.startsWith('chromium_headless_shell-')).sort().reverse();
@@ -17,26 +17,14 @@ if (!executable) throw new Error('Install Chromium/Chrome or set BROWSER_BIN to 
 
 const fixture = await startFixture();
 let browser, checks = 0;
-const pageErrors = [], pending = new Map();
+const pageErrors = [];
 try {
-  browser = spawn(executable, ['--headless', '--remote-debugging-pipe', `--user-data-dir=${join(fixture.directory, 'browser')}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update'], { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] });
-  let sequence = 0, buffer = '', stderr = '';
-  browser.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); });
-  const cdp = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
-    const id = ++sequence, timer = setTimeout(() => { pending.delete(id); reject(new Error(`Browser timeout: ${method}. ${stderr}`)); }, 12000);
-    pending.set(id, message => { clearTimeout(timer); message.error ? reject(new Error(JSON.stringify(message.error))) : resolve(message.result); });
-    browser.stdio[3].write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
+  console.log(`Browser checks: Node ${process.version} on ${process.platform}/${process.arch}; ${executable}`);
+  browser = await launchBrowser(executable, join(fixture.directory, 'browser'), {
+    onEvent: message => { if (message.method === 'Runtime.exceptionThrown') pageErrors.push(message.params.exceptionDetails); },
   });
-  browser.stdio[4].on('data', chunk => {
-    buffer += chunk;
-    for (let end; (end = buffer.indexOf('\0')) >= 0;) {
-      const message = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
-      if (message.method === 'Runtime.exceptionThrown') pageErrors.push(message.params.exceptionDetails);
-      const done = pending.get(message.id); if (done) { pending.delete(message.id); done(message); }
-    }
-  });
-  const { targetId } = await cdp('Target.createTarget', { url: 'about:blank' });
-  const { sessionId } = await cdp('Target.attachToTarget', { targetId, flatten: true });
+  const { cdp, sessionId, version } = browser;
+  console.log(`Browser ready: ${version.product}; protocol ${version.protocolVersion}`);
   const evaluate = async (expression, targetSession = sessionId) => {
     const result = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, targetSession);
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
@@ -244,5 +232,5 @@ try {
   assert.deepEqual(pageErrors, []);
   console.log(`\n${checks} browser checks passed.`);
 } finally {
-  await stop(browser); await fixture.close();
+  try { await browser?.close(); } finally { await fixture.close(); }
 }

@@ -5,7 +5,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
+      fail-fast: false
       matrix:
         node: [24, 26]
     steps:
@@ -17,8 +19,13 @@ jobs:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
       - run: npm ci --ignore-scripts
+      - name: Runtime versions
+        run: |
+          node --version
+          /usr/bin/google-chrome --version
       - run: npm test
       - run: npm run check:repo
-      - run: npm run test:browser
+      - name: Browser checks
+        run: npm run test:browser
         env:
           BROWSER_BIN: /usr/bin/google-chrome
