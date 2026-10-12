@@ -75,4 +75,6 @@ HOST=0.0.0.0 PORT=3000 APP_ORIGIN=https://playground.example.com npm start
 
 Configure your HTTPS reverse proxy to preserve that host. On Windows, set the same environment variables in your shell before `npm start`. This app needs a Node server and cannot run on static GitHub Pages alone.
 
+To update a Git checkout, run `git pull --ff-only`, then restart the Node process using the same `HOST`, `PORT`, and `APP_ORIGIN` settings. Refresh open playground tabs after restarting so they receive the new request token. Keep the same public URL to retain each browser's saved workspace. No build step is needed.
+
 Custom URLs are contacted from the server's network, including LAN addresses. The app has no user accounts; if you host it for others, put access control in front of it. The per-process request token protects local browser requests from forgery; it is not user authentication. [Hosting and data flow →](docs/architecture.md)

@@ -20,6 +20,8 @@ IndexedDB holds custom connections, scenarios and the latest 30 runs. Saved scen
 
 The default server binds to loopback. Host checks and same-origin request checks protect against DNS rebinding and cross-site browser calls. Relay POSTs also require the bootstrap token. CSP permits scripts and connections only from the app's own origin; dynamic display values are escaped and no external scripts, fonts, or analytics are loaded.
 
+External links may open the public homepage: a cross-site `GET /` is allowed only with `Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`. This exception does not apply to API routes (including bootstrap), subresources, embedded frames, or POSTs. Host and Origin validation still apply. After the page opens, its scripts and API calls use the app's own origin.
+
 To expose the app, set an explicit `APP_ORIGIN`, preserve its Host header at the reverse proxy, and add your own access control. Users who can access the app can instruct the relay to contact addresses reachable from its host. The app intentionally permits private network endpoints for local experimentation; it is not designed as an unrestricted public relay. An access gateway or an isolated deployment network is necessary when the audience is untrusted. Never enter a provider key into a deployment you do not trust: the relay operator can inspect traffic in memory.
 
 ## Source map

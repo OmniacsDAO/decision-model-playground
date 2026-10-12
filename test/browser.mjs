@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startFixture } from './helpers.mjs';
 import { launchBrowser } from './browser-driver.mjs';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 
 const cache = join(homedir(), 'Library/Caches/ms-playwright');
 const cached = (await readdir(cache).catch(() => [])).filter(name => name.startsWith('chromium_headless_shell-')).sort().reverse();
@@ -16,12 +18,20 @@ for (const candidate of candidates) { try { await access(candidate); executable 
 if (!executable) throw new Error('Install Chromium/Chrome or set BROWSER_BIN to its executable, then rerun npm run test:browser.');
 
 const fixture = await startFixture();
-let browser, checks = 0;
+let browser, externalSite, checks = 0;
 const pageErrors = [];
+const navigations = [], navigationSites = new Map();
 try {
   console.log(`Browser checks: Node ${process.version} on ${process.platform}/${process.arch}; ${executable}`);
   browser = await launchBrowser(executable, join(fixture.directory, 'browser'), {
-    onEvent: message => { if (message.method === 'Runtime.exceptionThrown') pageErrors.push(message.params.exceptionDetails); },
+    onEvent: message => {
+      if (message.method === 'Runtime.exceptionThrown') pageErrors.push(message.params.exceptionDetails);
+      if (message.method === 'Network.requestWillBeSent' && message.params.type === 'Document') navigations.push({ id: message.params.requestId, url: message.params.request.url });
+      if (message.method === 'Network.requestWillBeSentExtraInfo') {
+        const site = Object.entries(message.params.headers).find(([key]) => key.toLowerCase() === 'sec-fetch-site')?.[1];
+        navigationSites.set(message.params.requestId, site);
+      }
+    },
   });
   const { cdp, sessionId, version } = browser;
   console.log(`Browser ready: ${version.product}; protocol ${version.protocolVersion}`);
@@ -45,9 +55,35 @@ try {
   const ready = (targetSession = sessionId) => until('document.querySelector(".instructions-input") && !document.querySelector("#new-scenario").disabled', targetSession);
   const reload = async () => { const old = await evaluate('performance.timeOrigin'); await cdp('Page.reload', {}, sessionId); await until(`performance.timeOrigin !== ${old}`); await ready(); };
   const check = async (name, fn) => { await fn(); checks++; console.log(`PASS ${name}`); };
-  await cdp('Runtime.enable', {}, sessionId); await cdp('Page.enable', {}, sessionId);
+  await cdp('Runtime.enable', {}, sessionId); await cdp('Page.enable', {}, sessionId); await cdp('Network.enable', {}, sessionId);
   await cdp('Page.addScriptToEvaluateOnNewDocument', { source: 'window.confirm = () => true;' }, sessionId);
   await cdp('Page.navigate', { url: fixture.url }, sessionId); await ready();
+
+  await check('real cross-site links and redirects open the complete playground', async () => {
+    externalSite = createServer((request, response) => {
+      if (request.url === '/redirect') { response.writeHead(302, { location: fixture.url }); response.end(); return; }
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end(`<a id="direct" href="${fixture.url}">Open playground</a><br><a id="redirect" href="/redirect">Open via redirect</a>`);
+    });
+    externalSite.listen(0, '127.0.0.1'); await once(externalSite, 'listening');
+    // localhost and 127.0.0.1 are different sites, not merely different ports.
+    const source = `http://localhost:${externalSite.address().port}`;
+    for (const link of ['direct', 'redirect']) {
+      await cdp('Page.navigate', { url: source }, sessionId);
+      await until('document.querySelector("#direct") !== null');
+      const before = navigations.length;
+      const point = await evaluate(`(() => { const r = document.querySelector('#${link}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+      await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point }, sessionId);
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point }, sessionId);
+      await ready();
+      const navigation = navigations.slice(before).find(item => item.url === fixture.url + '/');
+      assert.ok(navigation, `${link}: expected navigation to the playground`);
+      assert.equal(navigationSites.get(navigation.id), 'cross-site', `${link}: must exercise an actual cross-site browser request`);
+      assert.equal(await evaluate('document.title'), 'Decision Model Playground');
+      assert.equal(await evaluate('document.querySelectorAll("#examples button").length'), 5);
+    }
+    assert.equal(fixture.calls.length, 0);
+  });
 
   let customId;
   await check('clean first visit has independent branding, examples, and no configured private endpoint', async () => {
@@ -232,5 +268,8 @@ try {
   assert.deepEqual(pageErrors, []);
   console.log(`\n${checks} browser checks passed.`);
 } finally {
-  try { await browser?.close(); } finally { await fixture.close(); }
+  try { await browser?.close(); } finally {
+    if (externalSite?.listening) { externalSite.closeAllConnections(); await new Promise(resolve => externalSite.close(resolve)); }
+    await fixture.close();
+  }
 }

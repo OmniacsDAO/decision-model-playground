@@ -9,6 +9,18 @@ import { startFixture, sample, answer } from './helpers.mjs';
 
 async function setup(t) { const f = await startFixture(); t.after(() => f.close()); return f; }
 
+// Node fetch rewrites Sec-Fetch-Mode. Use raw HTTP to test browser metadata exactly.
+function browserRequest(url, { method = 'GET', headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method, headers }, response => {
+      const chunks = []; response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve(new Response(Buffer.concat(chunks), { status: response.statusCode, headers: response.headers })));
+      response.on('error', reject);
+    });
+    request.on('error', reject); request.end(body);
+  });
+}
+
 test('base, versioned and full URLs preserve proxy prefixes', () => {
   for (const suffix of ['', '/', '/v1', '/v1/', '/v1/systemone']) {
     const connection = normalizeConnection({ id: 'custom', name: 'Server', kind: 'custom', model: 'model', baseUrl: `https://example.com/prefix${suffix}` });
@@ -109,6 +121,71 @@ test('origin, Host and anti-forgery checks reject external browser requests', as
   });
   assert.equal(status, 403);
   assert.equal(f.calls.length, 0);
+});
+
+test('external links can open the homepage without making the API public across sites', async t => {
+  const f = await setup(t);
+  const navigation = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+  for (const path of ['/', '/?from=external-link']) {
+    // A browser navigation normally has no Origin header. Do not require
+    // Sec-Fetch-User: redirects and in-app browsers may omit it.
+    const response = await browserRequest(f.url + path, { headers: navigation });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.match(await response.text(), /Decision Model Playground/);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('navigation exception excludes APIs, subresources, frames, POSTs and foreign Origins', async t => {
+  const f = await setup(t);
+  const navigation = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+  for (const path of ['/api/bootstrap', '/api/check', '/api/evaluate', '/healthz', '/app.js', '/styles.css', '/server.mjs']) {
+    const response = await browserRequest(f.url + path, { headers: navigation });
+    assert.equal(response.status, 403, path);
+    assert.deepEqual(await response.json(), { error: 'Cross-site requests are not accepted.' });
+  }
+  for (const changed of [
+    { 'sec-fetch-mode': 'cors' }, { 'sec-fetch-mode': 'no-cors' }, { 'sec-fetch-mode': '' },
+    { 'sec-fetch-dest': 'iframe' }, { 'sec-fetch-dest': 'frame' }, { 'sec-fetch-dest': 'object' }, { 'sec-fetch-dest': 'embed' }, { 'sec-fetch-dest': '' },
+    { origin: 'https://other.example' }, { origin: 'null' },
+  ]) assert.equal((await browserRequest(f.url, { headers: { ...navigation, ...changed } })).status, 403, JSON.stringify(changed));
+  for (const path of ['/', '/api/check', '/api/evaluate']) {
+    const response = await browserRequest(f.url + path, { method: 'POST',
+      headers: { ...navigation, origin: f.url, 'content-type': 'application/json', 'x-playground-token': f.token },
+      body: JSON.stringify({ connection: f.connection, scenario: sample }) });
+    assert.equal(response.status, 403, `POST ${path} even with a valid token`);
+  }
+  // Same-origin API calls still need both the request token and a valid Origin.
+  for (const path of ['/api/check', '/api/evaluate']) for (const changed of [
+    { 'x-playground-token': '' }, { 'x-playground-token': 'wrong' }, { origin: 'https://other.example' },
+  ]) assert.equal((await f.request(path, { connection: f.connection, scenario: sample }, { headers: { 'sec-fetch-site': 'same-origin', ...changed } })).status, 403);
+  assert.equal(f.calls.length, 0);
+});
+
+test('HTTPS public origin works through an HTTP proxy while retaining Host and API protection', async t => {
+  const publicOrigin = 'https://playground.example'; let calls = 0;
+  const server = await startServer({ port: 0, appOrigin: publicOrigin, fetcher: async (_, options) => {
+    calls++; return Response.json(answer(JSON.parse(options.body)));
+  } });
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  const request = (path, { headers = {}, ...options } = {}) => browserRequest(`http://127.0.0.1:${server.address().port}${path}`,
+    { ...options, headers: { host: 'playground.example', ...headers } });
+  const navigation = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' };
+  assert.equal((await request('/', { headers: navigation })).status, 200);
+  assert.equal((await request('/', { headers: { ...navigation, host: 'attacker.example' } })).status, 403);
+  assert.equal((await request('/api/bootstrap', { headers: navigation })).status, 403);
+  const bootstrap = await request('/api/bootstrap', { headers: { origin: publicOrigin, 'sec-fetch-site': 'same-origin' } });
+  assert.equal(bootstrap.status, 200);
+  const headers = { origin: publicOrigin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-playground-token': (await bootstrap.json()).token };
+  const input = JSON.stringify({ connection: { id: 'test', name: 'Test', kind: 'custom', model: 'fixture-model', baseUrl: 'http://model.example' }, scenario: sample });
+  const result = await request('/api/evaluate', { method: 'POST', headers, body: input });
+  assert.equal(result.status, 200); assert.equal(calls, 1);
+  assert.equal((await request('/api/evaluate', { method: 'POST', headers: { ...headers, ...navigation }, body: input })).status, 403);
+  assert.equal((await request('/api/evaluate', { method: 'POST', headers: { ...headers, origin: 'http://playground.example' }, body: input })).status, 403);
+  assert.equal(calls, 1);
 });
 
 test('only public assets are served; no data or key APIs exist', async t => {
