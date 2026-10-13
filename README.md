@@ -4,6 +4,8 @@ A compact workspace for asking decision models small, structured questions. Brin
 
 ![Decision Model Playground showing the built-in apple example](docs/preview.png)
 
+Watch a walkthrough [here](https://youtube.com/shorts/neMcQnL_pQk).
+
 ## Start
 
 Install [Node.js 24 or newer](https://nodejs.org/), open a terminal in the project folder, and run:
@@ -78,3 +80,7 @@ Configure your HTTPS reverse proxy to preserve that host. On Windows, set the sa
 To update a Git checkout, run `git pull --ff-only`, then restart the Node process using the same `HOST`, `PORT`, and `APP_ORIGIN` settings. Refresh open playground tabs after restarting so they receive the new request token. Keep the same public URL to retain each browser's saved workspace. No build step is needed.
 
 Custom URLs are contacted from the server's network, including LAN addresses. The app has no user accounts; if you host it for others, put access control in front of it. The per-process request token protects local browser requests from forgery; it is not user authentication. [Hosting and data flow →](docs/architecture.md)
+
+🌐 Powered By the Omniacs.DAO and the $IACS token
+
+If this project sparks your curiosity or helps you learn something new, consider supporting the token that funds public goods. Buy $IACS on Base. CA: 0x46e69Fa9059C3D5F8933CA5E993158568DC80EBf
